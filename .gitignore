@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+sanofi-env/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pipeline outputs (regenerated per run)
+anomaly_classification/fm_failure_modes.csv
+anomaly_classification/fm_failure_modes.*.csv
+anomaly_classification/fm_failure_modes_timeline.*
+anomaly_classification/fm_failure_modes_debug/
+anomaly_classification/fm_failure_modes_debug*.zip
+anomaly_classification/fm_frame_flags/
+anomaly_classification/fm_no_detection_frames/
+anomaly_classification/fm_source_temp/
+anomaly_classification/fm3_*.csv
+anomaly_classification/fm3_*.png
+anomaly_classification/fm3_eval_debug_*/
+anomaly_classification/synced_events/
+anomaly_classification/infeed_consistency_anomaly3.csv
+anomaly_classification/*.tts
+anomaly_classification/*.mp4
+anomaly_classification/*.zip
+
+# Model weights — distributed separately
+weights/
+*.pt

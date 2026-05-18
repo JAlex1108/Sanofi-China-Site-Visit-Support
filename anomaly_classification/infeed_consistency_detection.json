@@ -1,0 +1,153 @@
+{
+    "roi": {
+        "enabled": true,
+        "active_rois": [
+            {
+                "id": 1,
+                "name": "Region 1",
+                "enabled": true,
+                "mode": "include",
+                "shape": "rectangle",
+                "pipeline": {
+                    "use_global": true
+                },
+                "x": 88,
+                "y": 327,
+                "width": 211,
+                "height": 145
+            }
+        ],
+        "next_id": 2,
+        "mode": "include",
+        "x": 100,
+        "y": 50,
+        "width": 200,
+        "height": 150,
+        "shape": "rectangle"
+    },
+    "denoising": {
+        "enabled": false,
+        "filter_type": "median",
+        "kernel_size": 1,
+        "sigma": 1.17,
+        "sigma_color": 2.9,
+        "sigma_space": 4.03,
+        "index": 2
+    },
+    "edge_detection": {
+        "enabled": false,
+        "threshold1": 24,
+        "threshold2": 177,
+        "aperture_size": 7,
+        "index": 5,
+        "source": "mask"
+    },
+    "hue_detection": {
+        "enabled": true,
+        "target_hue": 120,
+        "hue_range": 30,
+        "saturation_min": 180,
+        "saturation_max": 255,
+        "value_min": 54,
+        "value_max": 252,
+        "hue_value": 98,
+        "hue_tolerance": 24,
+        "saturation_value": 232,
+        "saturation_tolerance": 52,
+        "value_value": 153,
+        "value_tolerance": 99,
+        "hue_min": 74,
+        "hue_max": 122,
+        "index": 1
+    },
+    "contour_filtering": {
+        "enabled": true,
+        "min_area": 1000,
+        "max_area": 0,
+        "min_perimeter": 0,
+        "max_perimeter": 0,
+        "min_convexity": 0.0,
+        "max_convexity": 1.0,
+        "min_circularity": 0.0,
+        "max_circularity": 1.0,
+        "min_aspect_ratio": 0.0,
+        "max_aspect_ratio": 0,
+        "index": 4
+    },
+    "shape_extraction": {
+        "enabled": false,
+        "shape_type": "circle",
+        "tolerance": 0.01,
+        "harris_block_size": 5,
+        "harris_ksize": 3,
+        "harris_k": 0.13,
+        "harris_threshold": 0.101,
+        "harris_dilate_size": 4,
+        "index": 6,
+        "hough_rho": 2.0,
+        "hough_theta_degrees": 0.3,
+        "hough_threshold": 1,
+        "hough_min_line_length": 17,
+        "hough_max_line_gap": 17,
+        "hough_line_thickness": 1,
+        "hough_min_angle": 70,
+        "hough_angle_filter_enabled": false,
+        "hough_max_angle": 127
+    },
+    "template_matching": {
+        "enabled": false,
+        "template_path": "",
+        "match_threshold": 0.8,
+        "min_matches": 10
+    },
+    "app": {
+        "theme": "default",
+        "active_tab": "mask",
+        "mask_processor_order": [
+            "hue_detection",
+            "denoising",
+            "morphology",
+            "contour_filtering",
+            "edge_detection",
+            "shape_extraction"
+        ]
+    },
+    "agent": {
+        "llm_provider": "ollama"
+    },
+    "morphology": {
+        "enabled": true,
+        "operation": "dilate",
+        "iterations": 1,
+        "kernel_size": 10,
+        "index": 3
+    },
+    "measurement": {
+        "enabled": false,
+        "line_coords": null
+    },
+    "detection_settings": {
+        "active_mode": "hue"
+    },
+    "insights": {
+        "enabled": true,
+        "text": "\u2022 \u2713 Very stable detection (CV=0.18). Mean count: 2.2. Process well-tuned.\n\u2022 \u2713 No strong linear correlation between gap distance and object count (Pearson r=0.24).",
+        "last_updated": "2026-02-06T11:02:04.146651",
+        "source": "agent"
+    },
+    "last_source": {
+        "type": "image",
+        "path": ""
+    },
+    "rcnn_detection": {
+        "enabled": true,
+        "iou_threshold": 0.5
+    },
+    "ocr_detection": {
+        "enabled": false,
+        "confidence_threshold": 0.46
+    },
+    "optical_flow": {
+        "enabled": false
+    }
+}

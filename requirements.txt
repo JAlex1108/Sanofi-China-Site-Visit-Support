@@ -1,0 +1,13 @@
+# Direct runtime dependencies for the failure-mode detection pipelines.
+# Pinned to the versions verified working on Windows 11 + Python 3.12.
+# Transitive deps (botocore, torch, torchvision, scipy, pillow, ...) resolve
+# automatically via pip. See requirements-lock.txt for the full frozen set.
+
+boto3==1.42.93
+matplotlib==3.10.8
+numpy==2.4.4
+opencv-python==4.13.0.92
+openpyxl==3.1.5
+plotly==6.7.0
+python-dotenv==1.0.1
+ultralytics==8.4.50
