@@ -76,6 +76,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+import torch
 from dotenv import load_dotenv
 from ultralytics import YOLO
 
@@ -295,10 +296,26 @@ class VideoResult:
 YOLO_FM_KEYS = ("FM1", "FM2", "FM4")
 
 
+def _resolve_yolo_device() -> Tuple[str, bool]:
+    """Pick the best available inference device for YOLO.
+
+    Returns ``(device, use_half)`` where ``device`` is an ultralytics-compatible
+    spec ("cuda:0" or "cpu") and ``use_half`` enables FP16 inference (GPU only).
+    Falls back to CPU silently when CUDA is unavailable; ultralytics would do
+    the same, but resolving it here lets us log the decision and pass an
+    explicit ``device`` into ``predict`` to skip its per-call auto-detect.
+    """
+    if torch.cuda.is_available():
+        return f"cuda:{torch.cuda.current_device()}", True
+    return "cpu", False
+
+
 def process_video(
     video_path: Path,
     roi: RoiConfig,
     model: YOLO,
+    device: str,
+    use_half: bool,
 ) -> VideoResult:
     evidence = {fm: FmEvidence() for fm in FM_ORDER}
     fm_frame_flags: Dict[str, List[bool]] = {fm: [] for fm in FM_ORDER}
@@ -353,7 +370,11 @@ def process_video(
             # so consecutive-run detection is frame-contiguous.
             best_per_fm: Dict[str, FrameHit] = {}
             results = model.predict(
-                frame, conf=YOLO_CONF_THRESHOLD, verbose=False
+                frame,
+                conf=YOLO_CONF_THRESHOLD,
+                device=device,
+                half=use_half,
+                verbose=False,
             )
             for res in results:
                 boxes = res.boxes
@@ -1309,6 +1330,16 @@ def main() -> None:
     print(f"Video source:  {source.description}")
 
     model = YOLO(str(yolo_weights))
+    device, use_half = _resolve_yolo_device()
+    if device.startswith("cuda"):
+        model.to(device)
+        gpu_name = torch.cuda.get_device_name(torch.cuda.current_device())
+        print(f"YOLO device:   {device} ({gpu_name}), half={use_half}")
+    else:
+        print(
+            "YOLO device:   cpu  (no CUDA available — install a GPU torch "
+            "build for a large speedup; see requirements.txt)"
+        )
     print(f"YOLO classes:  {model.names}")
 
     # --- Resume: the CSV is the source of truth for "already processed". ---
@@ -1346,7 +1377,7 @@ def main() -> None:
         local_path: Optional[Path] = None
         try:
             local_path = source.acquire(video, TEMP_VIDEO_DIR)
-            result = process_video(local_path, config.roi, model)
+            result = process_video(local_path, config.roi, model, device, use_half)
         except Exception as exc:  # noqa: BLE001 - report, skip, keep going
             print(f"ERROR ({exc})")
             errored_this_run += 1

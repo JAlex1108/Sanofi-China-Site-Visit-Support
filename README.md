@@ -22,9 +22,14 @@ Tuning knobs live at the top of
 ## Requirements
 
 - Python **3.10 – 3.12** (pinned dependencies were verified on 3.12.10).
-- ~3 GB free disk for the venv (ultralytics pulls torch + torchvision).
+- ~5 GB free disk for the venv (CUDA torch + torchvision + ultralytics).
 - The trained YOLO weights file `best.pt`. **Distributed separately from
   this repo** — see [YOLO weights](#yolo-weights) below.
+- **NVIDIA GPU strongly recommended.** YOLO is the dominant cost in the
+  pipeline; on CPU the `yolo_l` model runs at ~10 fps, which makes a full
+  archive pass impractical. With a modern GPU (verified on an RTX 5070 Ti,
+  Blackwell / CUDA 12.8) it runs at **~50 fps** out of the box. See
+  [GPU acceleration](#gpu-acceleration) below.
 
 ## Setup
 
@@ -92,6 +97,46 @@ Forward slashes work on Windows. Linux/macOS uses a regular absolute path.
 
 The pipeline raises a clear error at startup if the variable is unset or the
 file is missing, so a misconfiguration fails fast instead of mid-run.
+
+## GPU acceleration
+
+The pipeline auto-detects CUDA on startup. If a GPU is present it moves the
+YOLO model to the device and runs inference in FP16; otherwise it falls back
+to CPU with a warning. The device that was picked is printed at the top of
+every run, e.g.:
+
+```
+YOLO device:   cuda:0 (NVIDIA GeForce RTX 5070 Ti), half=True
+```
+
+`requirements.txt` already points pip at the **CUDA 12.8 PyTorch wheel index**
+(`--extra-index-url https://download.pytorch.org/whl/cu128`), so a fresh
+install via `pip install -r requirements.txt` will pull the GPU torch build
+on Windows / Linux without any extra steps. CUDA 12.8 is required for
+Blackwell (RTX 50xx) cards; it also works on Ada (40xx) and Ampere (30xx).
+
+### Expected throughput
+
+| Setup                                  | Throughput        |
+|----------------------------------------|-------------------|
+| CPU only (`torch==2.12.0+cpu`)         | ~10 fps           |
+| RTX 5070 Ti (CUDA 12.8, FP16)          | ~50 fps           |
+
+A typical 5-second 155 fps `.ts` clip (~775 frames) processes in roughly 15 s
+end-to-end on the GPU vs. 1m 15s on CPU. Throughput will vary with model size,
+frame resolution, and GPU; the headline number is the **~5× speedup** moving
+off CPU.
+
+### Forcing a CPU-only install
+
+If you genuinely have no GPU and want to skip the ~2 GB CUDA download, drop
+the `--extra-index-url` line from `requirements.txt` and pin the CPU wheels
+instead:
+
+```
+torch==2.12.0+cpu
+torchvision==0.27.0+cpu
+```
 
 ## Running
 
@@ -171,6 +216,8 @@ anomaly-classification/
 |------------------------------------------------------------------|----------------------------------------------------------------------------------------|
 | `YOLO_WEIGHTS_PATH is not set`                                   | Edit `.env` and set the absolute path to `best.pt`                                     |
 | `YOLO weights not found at …`                                    | Double-check the path; on Windows prefer forward slashes                               |
+| Run logs `YOLO device: cpu` despite having an NVIDIA GPU         | You installed the CPU torch build. Reinstall: `pip uninstall -y torch torchvision && pip install -r requirements.txt` (the file pins the CUDA 12.8 wheels) |
+| `~10 fps` YOLO throughput / pipeline feels glacial               | Same root cause as above — confirm with `python -c "import torch; print(torch.cuda.is_available())"`; should print `True` |
 | `S3 video source requires environment variables`                 | Either fill the three `S3_*` vars in `.env` or use `--source <local-folder>`           |
 | `AWS credentials unavailable` / `TokenRetrievalError`            | `aws sso login --profile <your-profile>`                                               |
 | `ImportError: DLL load failed` (Windows, opencv)                 | Install the MSVC 2015–2022 redistributable; reinstall via `pip install --force-reinstall opencv-python` |
