@@ -88,6 +88,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipelines.fm_state_store import (
     append_csv_row,
     load_all_frame_flags,
+    load_include_flags,
     load_processed_videos,
     save_frame_flags,
 )
@@ -1166,9 +1167,21 @@ def plot_timeline_html(
 
 
 def rebuild_timelines(ordered_video_filenames: List[str]) -> int:
-    """Rebuild both timeline outputs from the flag store. Returns video count."""
+    """Rebuild both timeline outputs from the flag store. Returns video count.
+
+    Honours the manual-review ``include`` column in the CSV: any video flagged
+    ``include=0`` is filtered out before the time-axis and per-FM dots are
+    built, so reviewer-rejected videos vanish from the graph completely. Rows
+    in pre-include CSVs (or rows the reviewer never touched) are treated as
+    included.
+    """
+    include = load_include_flags(OUTPUT_CSV)
+    kept = [v for v in ordered_video_filenames if include.get(v, True)]
+    excluded = len(ordered_video_filenames) - len(kept)
+    if excluded:
+        print(f"  excluding {excluded} reviewer-rejected video(s) from the timeline")
     statuses, markers, axis_min, axis_max = _build_timeline_data(
-        FLAG_STORE_DIR, ordered_video_filenames
+        FLAG_STORE_DIR, kept
     )
     if not markers or axis_min is None or axis_max is None:
         print("  (no time-placeable videos in the flag store yet — skipping timelines)")
@@ -1356,7 +1369,7 @@ def main() -> None:
     )
     if not pending:
         print("Nothing to process. Rebuilding timelines from the store.")
-        n = rebuild_timelines([v.filename for v in all_videos])
+        n = rebuild_timelines(sorted(processed))
         print(f"Timeline PNG:  {OUTPUT_TIMELINE_PNG}")
         print(f"Timeline HTML: {OUTPUT_TIMELINE_HTML}  ({n} videos)")
         return
@@ -1423,7 +1436,11 @@ def main() -> None:
         progress.record(time.monotonic() - video_start)
         print(f"  {progress.summary()}")
 
-    # Rebuild the timelines from the full store (every video ever processed).
+    # Rebuild the timelines from the CSV (every video ever processed across
+    # every run), not from the current source listing. A run pointed at a
+    # single folder would otherwise drop every video processed in earlier
+    # runs against a different folder from the graph, even though the CSV
+    # and the flag store still know about them.
     run_elapsed = (datetime.now() - run_start).total_seconds()
     print("-" * 70)
     print(
@@ -1434,7 +1451,7 @@ def main() -> None:
         f"Processed this run: {processed_this_run} ok, "
         f"{errored_this_run} errored, {len(pending)} attempted"
     )
-    n = rebuild_timelines([v.filename for v in all_videos])
+    n = rebuild_timelines(sorted(load_processed_videos(OUTPUT_CSV)))
     print(f"CSV:            {OUTPUT_CSV}")
     print(f"Flag store:     {FLAG_STORE_DIR}")
     print(f"Debug (FM hit): {DEBUG_DIR}")

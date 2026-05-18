@@ -23,7 +23,12 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 FM_ORDER: Tuple[str, ...] = ("FM1", "FM2", "FM3", "FM4")
-CSV_HEADER: Tuple[str, ...] = ("Video", "fm1", "fm2", "fm3", "fm4")
+# ``include`` is a manual-review override appended after the FM columns. New
+# rows are written with include=1; reviewers set 0 via scripts/review_debug_images.py
+# to drop a video from the timeline. Rows written before this column existed
+# (no ``include`` cell at all) are treated as include=1 on read.
+INCLUDE_COL: str = "include"
+CSV_HEADER: Tuple[str, ...] = ("Video", "fm1", "fm2", "fm3", "fm4", INCLUDE_COL)
 
 
 # =============================================================================
@@ -61,16 +66,130 @@ def ensure_csv_header(csv_path: Path) -> None:
 
 
 def append_csv_row(csv_path: Path, video_filename: str, flags: Dict[str, bool]) -> None:
-    """Append one ``Video, fm1, fm2, fm3, fm4`` row (0/1) to the CSV.
+    """Append one ``Video, fm1, fm2, fm3, fm4, include`` row (0/1) to the CSV.
 
     Called immediately after each video is processed so progress is durable.
+    Newly-appended rows default to ``include=1``; the manual-review GUI flips
+    this to 0 when a reviewer marks a video as a false positive.
     """
     ensure_csv_header(csv_path)
     with open(csv_path, "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            [video_filename] + [1 if flags.get(fm, False) else 0 for fm in FM_ORDER]
+            [video_filename]
+            + [1 if flags.get(fm, False) else 0 for fm in FM_ORDER]
+            + [1]
         )
+
+
+def load_include_flags(csv_path: Path) -> Dict[str, bool]:
+    """Return ``{video_filename: include}`` for every row in the CSV.
+
+    Rows missing the ``include`` cell (older CSV format) default to ``True``,
+    so the column can be introduced non-destructively. A missing CSV returns
+    an empty dict — callers should treat absent videos as included.
+    """
+    if not csv_path.exists():
+        return {}
+
+    out: Dict[str, bool] = {}
+    with open(csv_path, "r", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header is None:
+            return {}
+        try:
+            include_idx = [h.strip().lower() for h in header].index(INCLUDE_COL)
+        except ValueError:
+            include_idx = None  # legacy file with no include column
+        for row in reader:
+            if not row or not row[0]:
+                continue
+            if include_idx is None or include_idx >= len(row) or row[include_idx] == "":
+                out[row[0]] = True
+            else:
+                out[row[0]] = row[include_idx].strip() != "0"
+    return out
+
+
+def set_include_flags(
+    csv_path: Path, updates: Dict[str, bool]
+) -> int:
+    """Rewrite the CSV with the given ``{video_filename: include}`` overrides.
+
+    Rows not in ``updates`` keep their existing include value (or default to
+    True if the column was missing). The header is upgraded to include the
+    ``include`` column if it was absent. Returns the number of rows that
+    actually changed value, so callers can confirm the edit landed.
+
+    The CSV is rewritten via a temp file in the same directory and renamed
+    atomically (``os.replace``) so a crash mid-write never leaves a partial
+    file. Run this only while no pipeline run is appending rows — concurrent
+    writes would race on the rename.
+    """
+    if not csv_path.exists():
+        return 0
+
+    import os
+    import tempfile
+
+    with open(csv_path, "r", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header is None:
+            return 0
+        rows = [r for r in reader if r and r[0]]
+
+    lower = [h.strip().lower() for h in header]
+    try:
+        include_idx = lower.index(INCLUDE_COL)
+    except ValueError:
+        include_idx = None
+
+    changed = 0
+    new_rows: List[List[str]] = []
+    for row in rows:
+        video = row[0]
+        if include_idx is None or include_idx >= len(row) or row[include_idx] == "":
+            current = True
+        else:
+            current = row[include_idx].strip() != "0"
+        target = updates.get(video, current)
+        new_value = "1" if target else "0"
+        if current != target:
+            changed += 1
+        if include_idx is None:
+            new_row = list(row) + [new_value]
+        else:
+            new_row = list(row)
+            # Pad short rows up to include_idx if needed (defensive).
+            while len(new_row) <= include_idx:
+                new_row.append("")
+            new_row[include_idx] = new_value
+        new_rows.append(new_row)
+
+    new_header = list(header)
+    if include_idx is None:
+        new_header.append(INCLUDE_COL)
+
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=csv_path.name + ".",
+        suffix=".tmp",
+        dir=str(csv_path.parent),
+    )
+    try:
+        with os.fdopen(fd, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(new_header)
+            writer.writerows(new_rows)
+        os.replace(tmp_path, csv_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        finally:
+            raise
+
+    return changed
 
 
 # =============================================================================
